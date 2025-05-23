@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <title>Dashboard</title>
+    <link rel="stylesheet" type="text/css" th:href="@{/css/style.css}" />
+</head>
+<body>
+    <div class="container">
+        <h2>Dashboard</h2>
+        <p>Welcome, <span sec:authentication="principal.username">User</span>!</p>
+        
+        <form th:action="@{/logout}" method="post" style="display:inline;">
+            <button type="submit">Logout</button>
+        </form>
+
+        <hr/>
+
+        <div id="recognizeSomeoneSection">
+            <h3>Recognise Someone</h3>
+            <div>
+                <label for="userSearch">Search for user (by name or email):</label>
+                <input type="text" id="userSearch" name="userSearch" />
+                <div id="searchResults"></div> <!-- Results will be populated here -->
+            </div>
+
+            <form id="recognitionForm" style="display:none;">
+                <h4>Selected User: <span id="selectedUserName"></span></h4>
+                <input type="hidden" id="recipientId" name="recipientId" />
+                <div>
+                    <label for="recognitionAmount">Amount:</label>
+                    <input type="number" id="recognitionAmount" name="amount" required step="0.01" min="0.01" />
+                </div>
+                <div>
+                    <label for="recognitionMessage">Message (Optional):</label>
+                    <textarea id="recognitionMessage" name="message"></textarea>
+                </div>
+                <button type="button" onclick="sendRecognition()">Send Recognition</button>
+            </form>
+            <div id="recognitionStatus"></div>
+        </div>
+
+        </form>
+
+        <hr/>
+
+        <div id="balanceSection">
+            <h3>My Wallet</h3>
+            <p>Current Available Balance: <strong id="currentUserBalance">[Loading...]</strong></p>
+        </div>
+
+        <hr/>
+
+        <div id="recognizeSomeoneSection">
+            <h3>Recognise Someone</h3>
+            <div>
+                <label for="userSearch">Search for user (by name or email):</label>
+                <input type="text" id="userSearch" name="userSearch" />
+                <div id="searchResults"></div> <!-- Results will be populated here -->
+            </div>
+
+            <form id="recognitionForm" style="display:none;">
+                <h4>Selected User: <span id="selectedUserName"></span></h4>
+                <input type="hidden" id="recipientId" name="recipientId" />
+                <div>
+                    <label for="recognitionAmount">Amount:</label>
+                    <input type="number" id="recognitionAmount" name="amount" required step="0.01" min="0.01" />
+                </div>
+                <div>
+                    <label for="recognitionMessage">Message (Optional):</label>
+                    <textarea id="recognitionMessage" name="message"></textarea>
+                </div>
+                <button type="button" onclick="sendRecognition()">Send Recognition</button>
+            </form>
+            <div id="recognitionStatus"></div>
+        </div>
+
+        <hr/>
+
+        <div id="redeemBalanceSection">
+            <h3>Redeem Balance</h3>
+            <form id="redeemForm">
+                <div>
+                    <label for="redeemAmount">Amount to Redeem:</label>
+                    <input type="number" id="redeemAmount" name="amount" required step="0.01" min="0.01" />
+                </div>
+                <button type="button" onclick="submitRedemption()">Redeem</button>
+            </form>
+            <div id="redeemStatus"></div>
+        </div>
+
+        <hr/>
+        
+        <h4>Other Actions</h4> <!-- Renamed from "My Account Actions" -->
+        <ul>
+            <!-- Placeholder for future actions if any, or this section can be removed -->
+        </ul>
+        
+        <!-- Content for recognition, balance, redemption will be added here later -->
+    </div>
+
+<script>
+    // Ensure this script runs after the DOM is loaded
+    document.addEventListener('DOMContentLoaded', function () {
+        const userSearchInput = document.getElementById('userSearch');
+        const searchResultsDiv = document.getElementById('searchResults');
+        const recognitionForm = document.getElementById('recognitionForm');
+        const selectedUserNameSpan = document.getElementById('selectedUserName');
+        const recipientIdInput = document.getElementById('recipientId');
+        const recognitionAmountInput = document.getElementById('recognitionAmount');
+        const recognitionMessageInput = document.getElementById('recognitionMessage');
+        const recognitionStatusDiv = document.getElementById('recognitionStatus');
+        
+        // For Redemption
+        const redeemAmountInput = document.getElementById('redeemAmount');
+        const redeemStatusDiv = document.getElementById('redeemStatus');
+
+
+        // Function to fetch and display current user's balance (updated)
+        async function fetchCurrentUserBalance() {
+            const balanceSpan = document.getElementById('currentUserBalance');
+            if (!balanceSpan) return; 
+
+            try {
+                const response = await fetch('/api/users/me/balance');
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch balance: ${response.statusText}`);
+                }
+                const data = await response.json(); 
+                const balanceValue = data.balance !== undefined ? data.balance : data; 
+                
+                if (typeof balanceValue === 'number') {
+                    balanceSpan.textContent = balanceValue.toFixed(2); 
+                } else {
+                    const parsedBalance = parseFloat(balanceValue);
+                    if (!isNaN(parsedBalance)) {
+                         balanceSpan.textContent = parsedBalance.toFixed(2);
+                    } else {
+                        balanceSpan.textContent = balanceValue; 
+                    }
+                }
+                balanceSpan.style.color = 'green'; 
+            } catch (error) {
+                console.error('Error fetching balance:', error);
+                if (balanceSpan) {
+                    balanceSpan.textContent = '[Error]';
+                    balanceSpan.style.color = 'red';
+                }
+            }
+        }
+        
+        fetchCurrentUserBalance(); 
+
+        if (userSearchInput) {
+            userSearchInput.addEventListener('input', async function() {
+                const query = this.value.trim();
+                searchResultsDiv.innerHTML = ''; 
+                recognitionForm.style.display = 'none'; 
+                recognitionStatusDiv.textContent = '';
+
+                if (query.length < 2) { 
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/api/users/search?query=${encodeURIComponent(query)}`);
+                    if (!response.ok) {
+                        throw new Error(`Search failed: ${response.statusText}`);
+                    }
+                    const users = await response.json();
+                    if (users.length === 0) {
+                        searchResultsDiv.innerHTML = '<p>No users found.</p>';
+                    } else {
+                        const ul = document.createElement('ul');
+                        users.forEach(user => {
+                            const loggedInUserEmail = document.querySelector('span[sec\\:authentication="principal.username"]');
+                            if (loggedInUserEmail && user.email === loggedInUserEmail.textContent) {
+                                return; 
+                            }
+
+                            const li = document.createElement('li');
+                            li.textContent = `${user.firstName} ${user.lastName} (${user.email})`;
+                            li.style.cursor = 'pointer';
+                            li.setAttribute('data-id', user.id); 
+                            li.setAttribute('data-name', `${user.firstName} ${user.lastName}`); 
+                            
+                            li.addEventListener('click', () => {
+                                selectedUserNameSpan.textContent = li.getAttribute('data-name');
+                                recipientIdInput.value = li.getAttribute('data-id');
+                                recognitionForm.style.display = 'block';
+                                searchResultsDiv.innerHTML = ''; 
+                                userSearchInput.value = ''; 
+                            });
+                            ul.appendChild(li);
+                        });
+                        searchResultsDiv.appendChild(ul);
+                    }
+                } catch (error) {
+                    searchResultsDiv.innerHTML = `<p>Error searching users: ${error.message}</p>`;
+                }
+            });
+        }
+
+        const sendRecognitionButton = document.querySelector('#recognitionForm button');
+        if (sendRecognitionButton) {
+            sendRecognitionButton.addEventListener('click', sendRecognition); 
+        }
+        
+        async function sendRecognition() { 
+            const recipientId = recipientIdInput.value;
+            const amount = recognitionAmountInput.value;
+            const message = recognitionMessageInput.value;
+
+            if (!recipientId || !amount) {
+                recognitionStatusDiv.textContent = 'Recipient and amount are required.';
+                recognitionStatusDiv.style.color = 'red';
+                return;
+            }
+            if (parseFloat(amount) <= 0) {
+                recognitionStatusDiv.textContent = 'Amount must be positive.';
+                recognitionStatusDiv.style.color = 'red';
+                return;
+            }
+            
+            recognitionStatusDiv.textContent = 'Sending...';
+            recognitionStatusDiv.style.color = 'black';
+
+            try {
+                const response = await fetch('/api/recognitions/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', },
+                    body: JSON.stringify({ recipientId: parseInt(recipientId), amount: parseFloat(amount), message: message })
+                });
+
+                const responseData = await response.json(); 
+
+                if (response.ok) {
+                    recognitionStatusDiv.textContent = 'Recognition sent successfully!';
+                    recognitionStatusDiv.style.color = 'green';
+                    if(recognitionForm) recognitionForm.reset();
+                    if(recognitionForm) recognitionForm.style.display = 'none';
+                    if(selectedUserNameSpan) selectedUserNameSpan.textContent = '';
+                    if(recipientIdInput) recipientIdInput.value = '';
+                    
+                    fetchCurrentUserBalance(); 
+                } else {
+                    recognitionStatusDiv.textContent = `Error: ${responseData.message || response.statusText || 'Unknown error'}`;
+                    recognitionStatusDiv.style.color = 'red';
+                }
+            } catch (error) {
+                recognitionStatusDiv.textContent = `An unexpected error occurred: ${error.message}`;
+                recognitionStatusDiv.style.color = 'red';
+            }
+        }
+        window.sendRecognition = sendRecognition;
+
+
+        // --- Redeem Balance Feature ---
+        const redeemFormButton = document.querySelector('#redeemForm button');
+        if (redeemFormButton) {
+            redeemFormButton.addEventListener('click', submitRedemption);
+        }
+
+        async function submitRedemption() {
+            const amount = redeemAmountInput.value;
+
+            if (!amount) {
+                redeemStatusDiv.textContent = 'Redemption amount is required.';
+                redeemStatusDiv.style.color = 'red';
+                return;
+            }
+            if (parseFloat(amount) <= 0) {
+                redeemStatusDiv.textContent = 'Redemption amount must be positive.';
+                redeemStatusDiv.style.color = 'red';
+                return;
+            }
+
+            redeemStatusDiv.textContent = 'Processing redemption...';
+            redeemStatusDiv.style.color = 'black';
+
+            try {
+                const response = await fetch('/api/users/me/redeem', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ amount: parseFloat(amount) })
+                });
+
+                const responseData = await response.json(); 
+
+                if (response.ok) {
+                    redeemStatusDiv.textContent = 'Balance redeemed successfully! Redemption ID: ' + responseData.id; 
+                    redeemStatusDiv.style.color = 'green';
+                    document.getElementById('redeemForm').reset(); 
+                    fetchCurrentUserBalance(); 
+                } else {
+                    redeemStatusDiv.textContent = `Error: ${responseData.message || response.statusText || 'Redemption failed'}`;
+                    redeemStatusDiv.style.color = 'red';
+                }
+            } catch (error) {
+                redeemStatusDiv.textContent = `An unexpected error occurred: ${error.message}`;
+                redeemStatusDiv.style.color = 'red';
+                console.error("Redemption error:", error);
+            }
+        }
+        // Make submitRedemption globally accessible if using onclick attribute
+        window.submitRedemption = submitRedemption; 
+
+    });
+</script>
+</body>
+</html>

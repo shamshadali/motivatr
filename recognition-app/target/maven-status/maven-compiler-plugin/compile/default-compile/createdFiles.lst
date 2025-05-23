@@ -1,0 +1,5 @@
+com/example/recognitionapp/model/Recognition.class
+com/example/recognitionapp/model/RedemptionHistory.class
+com/example/recognitionapp/model/User.class
+com/example/recognitionapp/model/Org.class
+com/example/recognitionapp/RecognitionApplication.class
